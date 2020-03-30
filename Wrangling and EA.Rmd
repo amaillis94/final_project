@@ -1,0 +1,49 @@
+---
+title: "data cleaning"
+author: "Alex Maillis"
+date: "2/6/2020"
+output: pdf_document
+---
+
+```{r }
+install.packages(c("tidyverse","magrittr","dplyr","Rtools","rlang"))
+library(dplyr)
+library(tidyverse)
+library(magrittr)
+library(rlang)
+
+```
+==
+## Initial Exploration 
+
+The graphs and tables below will function to give us ideas as to how are data initially presents itself so as to better understand the level of data cleaning and wrangling that will be required to answer our question of interest.
+
+The first set of tables below show the distribution of sickle cell genotype and distribution of genotypes by sex. The majority of our patients have a genotype=1 which denotes an individual with the SS variant of sickle cell disease (see codebook for all genotype groups). By sex, SS is more prevalent within females vs. males. The distribution by sex also shows us that we have a large amount of individuals that have either an unidentified sex and a genotype that is not representative of sickle cell anemia (n=615) or unidentiified sex and missing genotype (n=967). These individuals will need to be excluded from any further analysis. Removing these individuals will reduce our sample size from 6,084 unique patients to 3,758 unique patients. 
+
+```{r data clean chunk 1}
+registry <- read.csv("P:/Hematology Oncology/Master Research Files.####/Katz SCD Program/Alex M/New Redcap projects cleaned data/registry_cleaned.csv")
+utilization <- read.csv("P:/Hematology Oncology/Master Research Files.####/Katz SCD Program/Alex M/New Redcap projects cleaned data/utilization_cleaned.csv")
+registry %>% count(genotype) %>% mutate(prop = prop.table(n))
+registry %>% count(sex, genotype) %>% group_by(sex) %>% mutate(prop = prop.table(n))
+registry_cases <- registry %>% filter(genotype<99 & !is.na(genotype))
+registry_cases %>% count(genotype) %>% mutate(prop = prop.table(n))
+registry_cases %>% summary()
+```
+
+## Data Merging and further Exploration
+
+The following steps will build upon earlier analysis but will incorporate utilization information on the patients that had a genotype that is confirmed sickle cell anemia and has a non-missing sex. 
+
+This boxplot is meant to help visualize number of inpatient admissions within 2019 restricted to individuals with > 8 admissions during 2019. Using this subset of more severe patients may help with identifying factors that can make our prediction measures more accurate.
+
+```{r clean 2}
+reg_util_combined<-left_join(registry_cases,utilization,by='corp_id')
+head(reg_util_combined,100)
+reg_util_combined %>% filter(pat_class=='IP') %>% filter(dsch_year>2018) %>% group_by(corp_id) %>% mutate(count=n()) %>% filter(count>8) %>% select(corp_id,genotype.x,primary_campus,readmissions,dsch_dx,dsch_year,count) %>% ggplot + aes(x=corp_id,y=count) + geom_boxplot() +labs(x="Corporate ID",y="# of 2019 Admissions") + theme(axis.text.x = element_text(angle=45,hjust=1))
+
+derivation<-reg_util_combined %>% filter(dsch_year>2017) %>% group_by(corp_id) %>% mutate(count=n()) %>% select(corp_id,genotype.x,primary_campus,pat_class,adm_date,dsch_date,los_days,readmissions,dsch_dx,dsch_year,count)
+
+derivation %>% ggplot + aes(x=genotype.x,y=count) + geom_count(color='blue') + facet_wrap(vars(dsch_dx)) + labs(x="SCA Genotype",y="Admissions",title = "Admission to Inpatient Services by Sickle Cell Genotype,Stratified by Discharge Diagnosis, 2018-2019") + theme_classic()
+
+```
+
